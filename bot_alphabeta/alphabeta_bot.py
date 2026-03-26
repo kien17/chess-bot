@@ -1,5 +1,6 @@
 import chess
 import math
+import os
 class ALPHABETA_Bot:
     def __init__(self):
         self.INF= 1e9
@@ -74,16 +75,27 @@ class ALPHABETA_Bot:
                 20, 30, 10,  0,  0, 10, 30, 20
             ]
         }
-
+        self.moves_count= 0
+        self.book_moves_cache= {}
+        self.loop= 0
     def alpha_beta_prunning(self, alpha, beta, depth, isMax, board: chess.Board):
+        self.loop+= 1
+        if (self.loop > 10000):
+            print(self.loop)
         best_move= None
         if depth == 0 or self.isEnd(board):
             return self.getPoint(board), best_move
         if isMax:
             value= - self.INF
-            possibleMove= self.getPossibleMove(board)
-            possibleMove= sorted(possibleMove, key= lambda m: self.evaluate_move(board, m), reverse= True)
-
+            if self.moves_count <= 5:
+                book_moves = self.get_book_moves(board)
+                if book_moves:
+                    move = book_moves[0]
+                    print(f"[BOOK MOVE] {move} (move {self.moves_count + 1})")
+                possibleMove= book_moves
+            else:
+                possibleMove= self.getPossibleMove(board)
+                possibleMove= sorted(possibleMove, key= lambda m: self.evaluate_move(board, m), reverse= True)
             for move in possibleMove:
                 board.push(move)
                 val, _= self.alpha_beta_prunning(alpha, beta, depth - 1, False, board)
@@ -97,8 +109,17 @@ class ALPHABETA_Bot:
             return value, best_move
         
         value= self.INF
-        possibleMove= self.getPossibleMove(board)
-        possibleMove= sorted(possibleMove, key= lambda m: self.evaluate_move(board, m), reverse= True)
+
+        if self.moves_count <= 5:
+            book_moves = self.get_book_moves(board)
+            if book_moves:
+                move = book_moves[0]
+                print(f"[BOOK MOVE] {move} (move {self.moves_count + 1})")
+            possibleMove= book_moves
+        else:
+            possibleMove= self.getPossibleMove(board)
+            possibleMove= sorted(possibleMove, key= lambda m: self.evaluate_move(board, m), reverse= True)
+
         for move in possibleMove:
             board.push(move)
             val, _ = self.alpha_beta_prunning(alpha, beta, depth - 1, True, board)
@@ -160,7 +181,52 @@ class ALPHABETA_Bot:
                 total_score -= (material_val + pst_val)
                 
         return total_score
-    
+
+    def get_book_moves(self, board):
+        """Lấy danh sách các nước từ opening book (có cache)"""
+        fen = board.fen()
+        
+        # Kiểm tra cache
+        if fen in self.book_moves_cache:
+            return self.book_moves_cache[fen]
+        
+        book_moves = {}
+        
+        try:
+            book_path = os.path.join(os.path.dirname(__file__), "..", "data", "gm2001.bin")
+            with chess.polyglot.open_reader(book_path) as reader:
+                for move in board.legal_moves:
+                    temp_board = board.copy()
+                    temp_board.push(move)
+                    entry = reader.get(temp_board)
+                    if entry:
+                        book_moves[move] = entry.weight
+        except:
+            pass
+        
+        # Nếu không có từ gm2001, thử komodo
+        if not book_moves:
+            try:
+                book_path = os.path.join(os.path.dirname(__file__), "..", "data", "komodo.bin")
+                with chess.polyglot.open_reader(book_path) as reader:
+                    for move in board.legal_moves:
+                        temp_board = board.copy()
+                        temp_board.push(move)
+                        entry = reader.get(temp_board)
+                        if entry:
+                            book_moves[move] = entry.weight
+            except:
+                pass
+        
+        # Sắp xếp theo weight giảm dần
+        sorted_moves = sorted(book_moves.items(), key=lambda x: x[1], reverse=True)
+        result = [move for move, _ in sorted_moves]
+        
+        # Lưu vào cache
+        self.book_moves_cache[fen] = result
+        
+        return result
+
     def evaluate_move(self, board: chess.Board, move: chess.Move):
         """
         Trả về một con số đánh giá mức độ 'hấp dẫn' của nước đi.
@@ -216,7 +282,12 @@ class ALPHABETA_Bot:
             isMax= False
         value, best_move= self.alpha_beta_prunning(-self.INF, self.INF, 5, isMax, current_board)
         if best_move == None:
-            best_move= self.getPossibleMove(current_board)[0]
+            possibleMoves= list(self.getPossibleMove(current_board))
+            if possibleMoves:
+                best_move= possibleMoves[0]
         print(player, " ",isMax, " ", value)
+        self.moves_count+= 1
+        print("loop: ", self.loop)
+        self.loop= 0
         return best_move
 

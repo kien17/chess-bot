@@ -2,6 +2,7 @@ import pygame
 import chess
 import os
 from bot_alphabeta.alphabeta_bot import ALPHABETA_Bot
+from bot_MCTS.mcts_bot import MCTS_bot
 # Cấu hình cơ bản
 WIDTH, HEIGHT = 512, 512
 DIMENSION = 8 
@@ -79,7 +80,8 @@ def main():
     temp_move = None
     selected_sq = None
     player_clicks = []
-    bot= ALPHABETA_Bot()
+    alphabeta_bot= ALPHABETA_Bot()
+    
     running = True
     while running:
         for e in pygame.event.get():
@@ -115,41 +117,40 @@ def main():
                     selected_sq = sq
                     player_clicks.append(selected_sq)
                 print(player_clicks)
-        if board.turn == chess.BLACK and  len(player_clicks) < 2:
-            continue
+        # if board.turn == chess.BLACK and  len(player_clicks) < 2:
+        #     continue
         piece= None
-        if board.turn == chess.BLACK:
-            from_sq, to_sq = player_clicks[0], player_clicks[1]
-            move = chess.Move(from_sq, to_sq)
-            piece = board.piece_at(from_sq)
-            # move= bot.next_move(board, 2)
-            # print(move)
-        elif board.turn == chess.WHITE:
-            move= bot.next_move(board, 1)
-            print(move)
-        if board.turn == chess.BLACK and piece and piece.piece_type == chess.PAWN and chess.square_rank(to_sq) in [0, 7]:
-            # Kiểm tra xem nước đi này có hợp lệ nếu giả định phong Hậu không
-            test_move = chess.Move(from_sq, to_sq, promotion=chess.QUEEN)
-            if test_move in board.legal_moves:
-                waiting_for_promotion = True
-                temp_move = move
-            else:
-                player_clicks = []
-        else:
-            if move in board.legal_moves:
-                board.push(move)
-                print(f"{move.uci()}") 
+        if board.turn == chess.WHITE:
+            # from_sq, to_sq = player_clicks[0], player_clicks[1]
+            # move = chess.Move(from_sq, to_sq)
+            # piece = board.piece_at(from_sq)
+            mcts_bot= MCTS_bot(chess.WHITE, board, 1000)
+            move= mcts_bot.get_best_move()
+        elif board.turn == chess.BLACK:
+            move= alphabeta_bot.next_move(board, 1)
+        # if board.turn == chess.BLACK and piece and piece.piece_type == chess.PAWN and chess.square_rank(to_sq) in [0, 7]:
+        #     # Kiểm tra xem nước đi này có hợp lệ nếu giả định phong Hậu không
+        #     test_move = chess.Move(from_sq, to_sq, promotion=chess.QUEEN)
+        #     if test_move in board.legal_moves:
+        #         waiting_for_promotion = True
+        #         temp_move = move
+        #     else:
+        #         player_clicks = []
+        # else:
+        if move in board.legal_moves:
+            board.push(move)
+            print(f"{move.uci()}") 
 
-                is_over, outcome = check_game_over(board)
-                if is_over:
-                    print("\n" + "*"*30)
-                    if outcome == "Draw":
-                        print("KẾT THÚC: VÁN ĐẤU HÒA!")
-                    else:
-                        print(f"KẾT THÚC: PHE {outcome.upper()} THẮNG TUYỆT ĐỐI!")
-                    print("*"*30 + "\n")
-                    
-                player_clicks, selected_sq = [], None
+            is_over, outcome = check_game_over(board)
+            if is_over:
+                print("\n" + "*"*30)
+                if outcome == "Draw":
+                    print("KẾT THÚC: VÁN ĐẤU HÒA!")
+                else:
+                    print(f"KẾT THÚC: PHE {outcome.upper()} THẮNG TUYỆT ĐỐI!")
+                print("*"*30 + "\n")
+                
+            player_clicks, selected_sq = [], None
 
         # VẼ GIAO DIỆN
         draw_board(screen)
