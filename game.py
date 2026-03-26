@@ -1,6 +1,9 @@
 import pygame
 import chess
-import os
+import os, threading
+from bot_alphabeta.alphabeta_bot import *
+from bot_MCTS.mcts_bot import *
+from bot_MCTS.mcts_node import *
 
 # Cấu hình cơ bản
 WIDTH, HEIGHT = 512, 512
@@ -15,13 +18,36 @@ class Player:
     
     def get_move(self, board):
         pass
+class MCTS(Player):
+    def __init__(self, color):
+        super().__init__(color)
+        self.bot = None
+    
+    def get_move(self, board):
+        if self.bot is None:
+            self.bot = MCTS_bot(self.color, board)
+        
+        return self.bot.get_best_move()
 
+class AlphaBeta(Player):
+    def __init__(self, color):
+        super().__init__(color)
+        self.bot = ALPHABETA_Bot()
+
+    def get_move(self, board):
+        if self.color == chess.WHITE:
+            return self.bot.next_move(board, 1)
+        else:
+            return self.bot.next_move(board, 1)
+        
 class Game:
     def __init__(self, display=True, player1=None, player2=None):
         self.screen = None
         self.clock = None
         self.display = display
         self.running = True
+        self.board_lock = threading.Lock()
+        self.bot_thread = None
 
         # game stuff
         self.board = None
@@ -170,7 +196,7 @@ class Game:
         col, row = mouse_pos[0] // SQ_SIZE, mouse_pos[1] // SQ_SIZE
         sq = chess.square(col, 7 - row)
         piece = self.board.piece_at(sq)
-        if piece is not None and (self.board.turn and piece.color == chess.WHITE or not self.board.turn and piece.color == chess.BLACK):
+        if piece is not None and (self.board.turn == piece.color):
             # just change/choose the piece to move
             self.src_sq = sq
             self.dest_sq = None
@@ -181,30 +207,27 @@ class Game:
             else:
                 self.dest_sq = sq
 
-    def update(self, move = None):
-        if move is not None:
-            self.board.push(move)
+    def update(self):
+        with self.board_lock:
+            # else handle normal user movement
+            if self.promoting:
+                return
+            if self.src_sq is None or self.dest_sq is None:
+                return
+            
+            move = chess.Move(self.src_sq, self.dest_sq)
+            # check if promotion move:
+            piece = self.board.piece_at(self.src_sq)
+            if piece.piece_type == chess.PAWN and chess.square_rank(self.dest_sq) in [0, 7]:
+                self.promoting = True
+                return
+            
+            if move in self.board.legal_moves:
+                self.board.push(move)
+                print(f"{move.uci()}")
+                self.src_sq = None
+                self.dest_sq = None
             return
-        
-        # else handle normal user movement
-        if self.promoting:
-            return
-        if self.src_sq is None or self.dest_sq is None:
-            return
-        
-        move = chess.Move(self.src_sq, self.dest_sq)
-        # check if promotion move:
-        piece = self.board.piece_at(self.src_sq)
-        if piece.piece_type == chess.PAWN and chess.square_rank(self.dest_sq) in [0, 7]:
-            self.promoting = True
-            return
-        
-        if move in self.board.legal_moves:
-            self.board.push(move)
-            print(f"{move.uci()}")
-            self.src_sq = None
-            self.dest_sq = None
-        return
 
     def game_end(self, outcome):
         if outcome == "Draw":
@@ -217,21 +240,28 @@ class Game:
         self.matches += 1
         self.reset_game()
 
+    def bot_play(self, player):
+        move = player.get_move(self.board)
+        if move:
+            # push the move safely
+            with self.board_lock:
+                self.board.push(move)
+
     def play(self):
         while self.running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
                 # player/bot control handling
-                if self.board.turn == chess.WHITE and self.player1 is not None:
-                    move = self.player1.get_move(self.board)
-                    if move:
-                        self.update(move)
-                elif self.board.turn == chess.BLACK and self.player2 is not None:
-                    move = self.player2.get_move(self.board)
-                    if move:
-                        self.update(move)
-                else:
+                if self.board.turn == chess.WHITE and self.player1 is not None and not self.promoting:
+                    if self.bot_thread is None or not self.bot_thread.is_alive():
+                        self.bot_thread = threading.Thread(target=self.bot_play, args=(self.player1,))
+                        self.bot_thread.start()
+                elif self.board.turn == chess.BLACK and self.player2 is not None and not self.promoting:
+                    if self.bot_thread is None or not self.bot_thread.is_alive():
+                        self.bot_thread = threading.Thread(target=self.bot_play, args=(self.player2,))
+                        self.bot_thread.start()
+                if self.board.turn == chess.WHITE and self.player1 is None or self.board.turn == chess.BLACK and self.player2 is None:
                     # handle manual player move
                     if self.promoting:
                         self.handle_promotion(event)
