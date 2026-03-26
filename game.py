@@ -41,7 +41,7 @@ class AlphaBeta(Player):
             return self.bot.next_move(board, 1)
         
 class Game:
-    def __init__(self, display=True, player1=None, player2=None):
+    def __init__(self, display=True, player1=None, player2=None, games=10):
         self.screen = None
         self.clock = None
         self.display = display
@@ -66,6 +66,7 @@ class Game:
         self.white = 0
         self.black = 0
         self.matches = 0
+        self.max_matches = games
 
     def init_game(self):
         pygame.init()
@@ -238,11 +239,14 @@ class Game:
             else:
                 self.black += 1    
         self.matches += 1
-        self.reset_game()
+        if self.matches >= self.max_matches:
+            self.running = False
+        else:
+            self.reset_game()
 
     def bot_play(self, player):
-        move = player.get_move(self.board)
-        if move:
+        move = player.get_move(self.board.copy())
+        if move and move in self.board.legal_moves:
             # push the move safely
             with self.board_lock:
                 self.board.push(move)
