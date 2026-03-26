@@ -105,11 +105,26 @@ class Game:
     
     def draw_board(self):
         colors = [pygame.Color("white"), pygame.Color("gray")]
+        font = pygame.font.SysFont("Arial", 14, bold=True)
+
         for r in range(DIMENSION):
             for c in range(DIMENSION):
+                rect = pygame.Rect(c * SQ_SIZE, r * SQ_SIZE, SQ_SIZE, SQ_SIZE)
                 color = colors[((r + c) % 2)]
-                pygame.draw.rect(self.screen, color, pygame.Rect(c * SQ_SIZE, r * SQ_SIZE, SQ_SIZE, SQ_SIZE))
-        
+                pygame.draw.rect(self.screen, color, rect)
+
+                if c == 0:
+                    row_num = str(DIMENSION - r)
+                    label = font.render(row_num, True, pygame.Color("black"))
+                    self.screen.blit(label, (rect.x + 2, rect.y + 2))
+
+                if r == DIMENSION - 1:
+                    col_char = chr(ord('a') + c)
+                    label = font.render(col_char, True, pygame.Color("black"))
+                    self.screen.blit(label, (rect.x + SQ_SIZE - label.get_width() - 2,
+                                            rect.y + SQ_SIZE - label.get_height() - 2))
+
+        # Highlight legal moves if a source square is selected
         if self.src_sq is not None:
             legal_moves = [m for m in self.board.legal_moves if m.from_square == self.src_sq]
             for move in legal_moves:
@@ -247,9 +262,10 @@ class Game:
     def bot_play(self, player):
         move = player.get_move(self.board.copy())
         if move and move in self.board.legal_moves:
-            # push the move safely
             with self.board_lock:
                 self.board.push(move)
+        else:
+            print("BOT GIVING ILLEGAL MOVE")
 
     def play(self):
         while self.running:
