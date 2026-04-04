@@ -110,7 +110,7 @@ def run_headless_tournament_mp(bot_class, bot_name, num_processes=None):
             total_cpl += cpl
             total_bot_moves += bot_moves
             
-            print(f"[{completed}/{MATCHES}] Ván của {bot_name} kết thúc. Thắng: {wins} | Thua: {losses} | Hòa: {draws}")
+            print(f"[{completed}/{MATCHES}] Ván của {bot_name} kết thúc. Thắng: {wins} | Thua: {losses} | Hòa: {draws} | CPL trung bình: {round(total_cpl / total_bot_moves, 2) if total_bot_moves > 0 else 'N/A'}", end="\r")
 
     # Tính toán kết quả tổng quát
     avg_cpl = total_cpl / total_bot_moves if total_bot_moves > 0 else 0
@@ -124,9 +124,12 @@ def run_headless_tournament_mp(bot_class, bot_name, num_processes=None):
     print(f"Average Centipawn Loss (CPL): {round(avg_cpl, 2)}")
     print(f"Độ chính xác (Accuracy): ~{round(accuracy, 2)}%")
 
+    print("----------------------------------------")
+    print("Số nước đi trung bình: ", round(total_bot_moves / MATCHES, 2))
+
 if __name__ == "__main__":
     # Bắt buộc phải có __name__ == "__main__" trên Windows để chạy multiprocessing
     print("BẮT ĐẦU ĐÁNH GIÁ (MULTIPROCESSING)...")
     
-    run_headless_tournament_mp(MCTS, "MCTS Bot", num_processes=2)
-    # run_headless_tournament_mp(AlphaBeta, "AlphaBeta Bot", num_processes=4)
+    run_headless_tournament_mp(MCTS, "MCTS Bot", num_processes=multiprocessing.cpu_count())
+    # run_headless_tournament_mp(AlphaBeta, "AlphaBeta Bot", num_processes=multiprocessing.cpu_count())

@@ -5,7 +5,7 @@ import random
 import os
 
 class MCTS_bot:
-    def __init__(self, color, current_board, max_iterations=1000):
+    def __init__(self, color, current_board, max_iterations=5000):
         self.root = None
         self.max_iterations = max_iterations
         self.color = color
@@ -309,7 +309,7 @@ class MCTS_bot:
             book_moves = self.get_book_moves(self.current_board)
             if book_moves:
                 move = book_moves[0]
-                print(f"[BOOK MOVE] {move} (move {move_count + 1})")
+                # print(f"[BOOK MOVE] {move} (move {move_count + 1})")
                 return move
         
         # *** TRUNG CUỘC: Dùng MCTS ***
@@ -362,11 +362,11 @@ class MCTS_bot:
             best_child = max(self.root.children, key=lambda c: c.visits)
             next_move = best_child.move
             force = self.get_force_info(self.current_board)
-            print(
-                f"[MCTS MOVE] {next_move} | Visits: {best_child.visits} | Score: {best_child.wins:.0f} "
-                f"| W_mat={force['white_material']} B_mat={force['black_material']} "
-                f"| W_pcs={force['white_pieces']} B_pcs={force['black_pieces']} "
-                f"| Δ_mat={force['material_diff']} Δ_pcs={force['piece_diff']}"
-            )
+            # print(
+            #     f"[MCTS MOVE] {next_move} | Visits: {best_child.visits} | Score: {best_child.wins:.0f} "
+            #     f"| W_mat={force['white_material']} B_mat={force['black_material']} "
+            #     f"| W_pcs={force['white_pieces']} B_pcs={force['black_pieces']} "
+            #     f"| Δ_mat={force['material_diff']} Δ_pcs={force['piece_diff']}"
+            # )
 
         return next_move
