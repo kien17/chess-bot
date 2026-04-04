@@ -80,8 +80,6 @@ class ALPHABETA_Bot:
         self.loop= 0
     def alpha_beta_prunning(self, alpha, beta, depth, isMax, board: chess.Board):
         self.loop+= 1
-        if (self.loop > 10000):
-            print(self.loop)
         best_move= None
         if depth == 0 or self.isEnd(board):
             return self.getPoint(board), best_move
@@ -91,7 +89,7 @@ class ALPHABETA_Bot:
                 book_moves = self.get_book_moves(board)
                 if book_moves:
                     move = book_moves[0]
-                    print(f"[BOOK MOVE] {move} (move {self.moves_count + 1})")
+                    # print(f"[BOOK MOVE] {move} (move {self.moves_count + 1})")
                 possibleMove= book_moves
             else:
                 possibleMove= self.getPossibleMove(board)
@@ -114,7 +112,7 @@ class ALPHABETA_Bot:
             book_moves = self.get_book_moves(board)
             if book_moves:
                 move = book_moves[0]
-                print(f"[BOOK MOVE] {move} (move {self.moves_count + 1})")
+                # print(f"[BOOK MOVE] {move} (move {self.moves_count + 1})")
             possibleMove= book_moves
         else:
             possibleMove= self.getPossibleMove(board)
@@ -285,9 +283,9 @@ class ALPHABETA_Bot:
             possibleMoves= list(self.getPossibleMove(current_board))
             if possibleMoves:
                 best_move= possibleMoves[0]
-        print(player, " ",isMax, " ", value)
+        # print(player, " ",isMax, " ", value)
         self.moves_count+= 1
-        print("loop: ", self.loop)
+        # print("loop: ", self.loop)
         self.loop= 0
         return best_move
 
