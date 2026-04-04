@@ -35,5 +35,5 @@ pip install -r requirements.txt
 
 - Sủ dụng stockfish để đo độ chính xác của từng bot
 ```
-python evaluate.py
+python .\evaluate.py
 ```
