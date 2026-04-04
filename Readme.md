@@ -33,7 +33,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-- Sủ dụng stockfish để đo độ chính xác của từng con bot
+- Sủ dụng stockfish để đo độ chính xác của từng bot
 ```
 python evaluate.py
 ```
