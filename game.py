@@ -27,7 +27,7 @@ class MCTS(Player):
         if self.bot is None:
             self.bot = MCTS_bot(self.color, board)
         
-        return self.bot.get_best_move()
+        return self.bot.get_best_move(board)
 
 class AlphaBeta(Player):
     def __init__(self, color):
@@ -246,6 +246,7 @@ class Game:
 
     def bot_play(self, player):
         move = player.get_move(self.board.copy())
+        print(f"Bot {'WHITE' if player.color else 'BLACK'} plays: {move}")
         if move and move in self.board.legal_moves:
             # push the move safely
             with self.board_lock:

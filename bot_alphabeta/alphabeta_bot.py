@@ -1,18 +1,28 @@
 import chess
-import math
+import chess.polyglot
 import os
+from collections import defaultdict
+# Các hằng số cho Transposition Table (Bảng chuyển đổi)
+EXACT = 0
+LOWERBOUND = 1
+UPPERBOUND = 2
+
+
 class ALPHABETA_Bot:
     def __init__(self):
-        self.INF= 1e9
+        self.INF = int(1e9)
+        
+
         self.PIECE_VALUES = {
-            chess.PAWN: 1,
-            chess.KNIGHT: 3,
-            chess.BISHOP: 3,
-            chess.ROOK: 3,
-            chess.QUEEN: 9,
-            chess.KING: 20
+            chess.PAWN: 100,
+            chess.KNIGHT: 320,
+            chess.BISHOP: 330,
+            chess.ROOK: 500,
+            chess.QUEEN: 900,
+            chess.KING: 20000
         }
-        # Bảng điểm vị trí (PST) - Càng cao càng tốt
+        
+        # Bảng điểm vị trí (PST)
         self.pst = {
             chess.PAWN: [
                 0,  0,  0,  0,  0,  0,  0,  0,
@@ -44,22 +54,22 @@ class ALPHABETA_Bot:
                 -10,  0,  0,  0,  0,  0,  0,-10,
                 -20,-10,-10,-10,-10,-10,-10,-20
             ],
-            chess.ROOK: [ # Ưu tiên hàng 7 và các cột trung tâm
+            chess.ROOK: [ 
                 0,  0,  0,  5,  5,  0,  0,  0,
                 5, 10, 10, 10, 10, 10, 10,  5,
-            -5,  0,  0,  0,  0,  0,  0, -5,
-            -5,  0,  0,  0,  0,  0,  0, -5,
-            -5,  0,  0,  0,  0,  0,  0, -5,
-            -5,  0,  0,  0,  0,  0,  0, -5,
-            -5,  0,  0,  0,  0,  0,  0, -5,
+               -5,  0,  0,  0,  0,  0,  0, -5,
+               -5,  0,  0,  0,  0,  0,  0, -5,
+               -5,  0,  0,  0,  0,  0,  0, -5,
+               -5,  0,  0,  0,  0,  0,  0, -5,
+               -5,  0,  0,  0,  0,  0,  0, -5,
                 0,  0,  0,  2,  2,  0,  0,  0
             ],
-            chess.QUEEN: [ # Hậu nên tránh ra sớm nhưng cần kiểm soát trung tâm
+            chess.QUEEN: [ 
                 -20,-10,-10, -5, -5,-10,-10,-20,
                 -10,  0,  5,  0,  0,  0,  0,-10,
                 -10,  5,  5,  5,  5,  5,  0,-10,
-                0,  0,  5,  5,  5,  5,  0, -5,
-                -5,  0,  5,  5,  5,  5,  0, -5,
+                  0,  0,  5,  5,  5,  5,  0, -5,
+                 -5,  0,  5,  5,  5,  5,  0, -5,
                 -10,  0,  5,  5,  5,  5,  0,-10,
                 -10,  0,  0,  0,  0,  0,  0,-10,
                 -20,-10,-10, -5, -5,-10,-10,-20
@@ -71,125 +81,216 @@ class ALPHABETA_Bot:
                 -30,-40,-40,-50,-50,-40,-40,-30,
                 -20,-30,-30,-40,-40,-30,-30,-20,
                 -10,-20,-20,-20,-20,-20,-20,-10,
-                20, 20,  0,  0,  0,  0, 20, 20,
-                20, 30, 10,  0,  0, 10, 30, 20
+                 20, 20,  0,  0,  0,  0, 20, 20,
+                 20, 30, 10,  0,  0, 10, 30, 20
             ]
         }
-        self.moves_count= 0
-        self.book_moves_cache= {}
-        self.loop= 0
-    def alpha_beta_prunning(self, alpha, beta, depth, isMax, board: chess.Board):
-        self.loop+= 1
-        best_move= None
-        if depth == 0 or self.isEnd(board):
-            return self.getPoint(board), best_move
-        if isMax:
-            value= - self.INF
-            if self.moves_count <= 5:
-                book_moves = self.get_book_moves(board)
-                if book_moves:
-                    move = book_moves[0]
-                    # print(f"[BOOK MOVE] {move} (move {self.moves_count + 1})")
-                possibleMove= book_moves
-            else:
-                possibleMove= self.getPossibleMove(board)
-                possibleMove= sorted(possibleMove, key= lambda m: self.evaluate_move(board, m), reverse= True)
-            for move in possibleMove:
-                board.push(move)
-                val, _= self.alpha_beta_prunning(alpha, beta, depth - 1, False, board)
-                board.pop()
-                if value < val:
-                    value= val
-                    best_move= move
-                if alpha >= beta:
-                    break
-                alpha= max(alpha, value)
-            return value, best_move
         
-        value= self.INF
+        # Memory cho bot
+        self.book_moves_cache = {}
+        self.tt = {}                                      # Transposition Table
+        self.killer_moves = defaultdict(lambda: [None, None]) # Killer Heuristic
+        self.history = defaultdict(int)                   # History Heuristic
+        self.nodes_evaluated = 0
 
-        if self.moves_count <= 5:
+    def next_move(self, board, max_depth=4):
+        self.nodes_evaluated = 0
+        
+
+        if board.fullmove_number <= 10:  # Giai đoạn khai cuộc (10 nước đầu)
             book_moves = self.get_book_moves(board)
             if book_moves:
-                move = book_moves[0]
-                # print(f"[BOOK MOVE] {move} (move {self.moves_count + 1})")
-            possibleMove= book_moves
-        else:
-            possibleMove= self.getPossibleMove(board)
-            possibleMove= sorted(possibleMove, key= lambda m: self.evaluate_move(board, m), reverse= True)
+                return book_moves[0]
 
-        for move in possibleMove:
-            board.push(move)
-            val, _ = self.alpha_beta_prunning(alpha, beta, depth - 1, True, board)
-            board.pop()
-            if value > val:
-                value= val
-                best_move= move
+        best_move = None
+        
+        # 1: Iterative Deepening 
+        for depth in range(1, max_depth + 1):
+            score, move = self.negamax(board, depth, -self.INF, self.INF)
+            if move:
+                best_move = move
+                
+        return best_move
+
+    def negamax(self, board, depth, alpha, beta):
+        self.nodes_evaluated += 1
+        original_alpha = alpha
+        
+        # 2: Transposition Table Lookup
+        fen = board.fen()
+        tt_entry = self.tt.get(fen)
+        if tt_entry and tt_entry['depth'] >= depth:
+            if tt_entry['flag'] == EXACT:
+                return tt_entry['score'], tt_entry['move']
+            elif tt_entry['flag'] == LOWERBOUND:
+                alpha = max(alpha, tt_entry['score'])
+            elif tt_entry['flag'] == UPPERBOUND:
+                beta = min(beta, tt_entry['score'])
             if alpha >= beta:
-                break
-            beta= min(beta, value)
-        return value, best_move
-    
-    def isEnd(self, board: chess.Board):
-        possibleMove= self.getPossibleMove(board)
+                return tt_entry['score'], tt_entry['move']
 
-        if self.check_win(board):
-            return True
+        #  Tìm kiếm tĩnh
+        if board.is_game_over() or depth <= 0:
+            if depth <= 0:
+                score = self.quiescence_search(board, alpha, beta)
+            else:
+                score = self.evaluate_board(board)
+            return score, None
 
-        if board.is_stalemate() or board.is_insufficient_material() or board.is_seventyfive_moves():
-            return True
+        # 3: Null Move Pruning
+        if depth >= 3 and not board.is_check() and self.has_non_pawn_material(board, board.turn):
+            board.push(chess.Move.null())
+            score, _ = self.negamax(board, depth - 3, -beta, -beta + 1)
+            score = -score
+            board.pop()
+            if score >= beta:
+                return beta, None # Cắt tỉa sớm
 
-        if (possibleMove.count() > 0):
-            return False
-        return True
+        best_move = None
+        best_val = -self.INF
+        
+        # Lấy nước đi tốt nhất từ TT để duyệt trước
+        tt_move = tt_entry['move'] if tt_entry else None
+        
+        # 4: Move Ordering (Sắp xếp nước đi)
+        moves = self.get_ordered_moves(board, depth, tt_move, captures_only=False)
+        
+        for move in moves:
+            board.push(move)
+            # Công thức Negamax: đảo dấu alpha/beta và score
+            val, _ = self.negamax(board, depth - 1, -beta, -alpha)
+            val = -val
+            board.pop()
 
-    def check_win(self, board: chess.Board):
-        if board.is_checkmate():
-            return True
-        return False
+            if val > best_val:
+                best_val = val
+                best_move = move
 
-    def getPoint(self, board: chess.Board):
-        # Nếu game kết thúc, trả về điểm vô cực
+            alpha = max(alpha, val)
+            if alpha >= beta:
+                # 5: Cập nhật Killer Moves và History
+                if not board.is_capture(move):
+                    self.killer_moves[depth][1] = self.killer_moves[depth][0]
+                    self.killer_moves[depth][0] = move
+                    self.history[(board.turn, move.from_square, move.to_square)] += depth ** 2
+                break # Cắt tỉa Beta
+
+        # Lưu vào Transposition Table
+        flag = EXACT
+        if best_val <= original_alpha:
+            flag = UPPERBOUND
+        elif best_val >= beta:
+            flag = LOWERBOUND
+            
+        self.tt[fen] = {'depth': depth, 'score': best_val, 'flag': flag, 'move': best_move}
+
+        return best_val, best_move
+
+    def quiescence_search(self, board, alpha, beta):
+        """ TỐI ƯU 6: Tìm kiếm tĩnh, giải quyết Horizon Effect bằng cách chỉ duyệt các nước ăn quân """
+        self.nodes_evaluated += 1
+        
+        # Điểm hiện tại trước khi ăn
+        stand_pat = self.evaluate_board(board)
+        
+        if stand_pat >= beta:
+            return beta
+        if alpha < stand_pat:
+            alpha = stand_pat
+
+        # Chỉ sinh các nước đi ăn quân
+        moves = self.get_ordered_moves(board, 0, None, captures_only=True)
+        
+        for move in moves:
+            board.push(move)
+            score = -self.quiescence_search(board, -beta, -alpha)
+            board.pop()
+
+            if score >= beta:
+                return beta
+            if score > alpha:
+                alpha = score
+                
+        return alpha
+
+    def get_ordered_moves(self, board, depth, tt_move, captures_only=False):
+        """ Hàm đánh giá và sắp xếp các nước đi để Beta-Cutoff xảy ra sớm nhất """
+        moves = list(board.legal_moves)
+        if captures_only:
+            moves = [m for m in moves if board.is_capture(m)]
+
+        def score_move(move):
+            if move == tt_move:
+                return 1000000  # Luôn thử nước đi từ Transposition Table đầu tiên
+
+            score = 0
+            captured_piece = board.piece_at(move.to_square)
+            if captured_piece:
+                # MVV-LVA: Quân yếu ăn quân mạnh được điểm cao nhất
+                moving_piece = board.piece_at(move.from_square)
+                score = 100000 + self.PIECE_VALUES[captured_piece.piece_type] * 10 - self.PIECE_VALUES[moving_piece.piece_type]
+            else:
+                # Ưu tiên Killer moves nếu không ăn quân
+                if depth > 0 and move in self.killer_moves[depth]:
+                    score = 90000
+                else:
+                    # History Heuristic
+                    score = self.history.get((board.turn, move.from_square, move.to_square), 0)
+
+            # Ưu tiên phong cấp
+            if move.promotion:
+                score += self.PIECE_VALUES[move.promotion]
+
+            return score
+
+        moves.sort(key=score_move, reverse=True)
+        return moves
+
+    def evaluate_board(self, board):
+        """ 7: Hàm đánh giá có tính góc nhìn phe và Pawn Structure cơ bản """
         if board.is_checkmate():
             return -99999 if board.turn == chess.WHITE else 99999
+        if board.is_stalemate() or board.is_insufficient_material() or board.is_seventyfive_moves():
+            return 0
 
-        total_score = 0
-        
-        # Duyệt qua tất cả các ô có quân cờ
+        score = 0
         for square, piece in board.piece_map().items():
             p_type = piece.piece_type
+            val = self.PIECE_VALUES[p_type]
             
-            # 1. Lấy giá trị quân cờ (Material)
-            material_val = self.PIECE_VALUES.get(p_type, 0)
-            
-            # 2. Lấy giá trị vị trí (PST)
-            table = self.pst.get(p_type, [0] * 64)
-            
-            # Đảo ngược bảng nếu là quân Đen để nhìn đúng hướng
-            actual_sq = square
-            if piece.color == chess.BLACK:
-                actual_sq = chess.square_mirror(square)
-                
-            pst_val = table[actual_sq]
-            
-            # Cộng vào tổng điểm (Trắng cộng, Đen trừ)
+            # Cấu trúc tốt: Phạt điểm tốt chồng (Doubled Pawns)
+            if p_type == chess.PAWN:
+                file_idx = chess.square_file(square)
+                pawns_in_file = len(board.pieces(chess.PAWN, piece.color) & chess.BB_FILES[file_idx])
+                if pawns_in_file > 1:
+                    val -= 20 # Trừ 0.2 điểm Tốt
+
+            actual_sq = square if piece.color == chess.WHITE else chess.square_mirror(square)
+            pst_val = self.pst.get(p_type, [0]*64)[actual_sq]
+
+            # Điểm thực tế: Trắng +, Đen -
             if piece.color == chess.WHITE:
-                total_score += (material_val + pst_val)
+                score += (val + pst_val)
             else:
-                total_score -= (material_val + pst_val)
-                
-        return total_score
+                score -= (val + pst_val)
+
+        # Trong Negamax, hàm đánh giá LUÔN TRẢ VỀ theo góc nhìn của phe đang đến lượt
+        perspective = 1 if board.turn == chess.WHITE else -1
+        return score * perspective
+
+    def has_non_pawn_material(self, board, color):
+        """ Kiểm tra xem phe 'color' có quân nào khác Tốt và Vua không """
+        for piece_type in [chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN]:
+            if len(board.pieces(piece_type, color)) > 0:
+                return True
+        return False
 
     def get_book_moves(self, board):
-        """Lấy danh sách các nước từ opening book (có cache)"""
         fen = board.fen()
-        
-        # Kiểm tra cache
         if fen in self.book_moves_cache:
             return self.book_moves_cache[fen]
         
         book_moves = {}
-        
         try:
             book_path = os.path.join(os.path.dirname(__file__), "..", "data", "gm2001.bin")
             with chess.polyglot.open_reader(book_path) as reader:
@@ -197,95 +298,11 @@ class ALPHABETA_Bot:
                     temp_board = board.copy()
                     temp_board.push(move)
                     entry = reader.get(temp_board)
-                    if entry:
-                        book_moves[move] = entry.weight
-        except:
+                    if entry: book_moves[move] = entry.weight
+        except Exception:
             pass
         
-        # Nếu không có từ gm2001, thử komodo
-        if not book_moves:
-            try:
-                book_path = os.path.join(os.path.dirname(__file__), "..", "data", "komodo.bin")
-                with chess.polyglot.open_reader(book_path) as reader:
-                    for move in board.legal_moves:
-                        temp_board = board.copy()
-                        temp_board.push(move)
-                        entry = reader.get(temp_board)
-                        if entry:
-                            book_moves[move] = entry.weight
-            except:
-                pass
-        
-        # Sắp xếp theo weight giảm dần
-        sorted_moves = sorted(book_moves.items(), key=lambda x: x[1], reverse=True)
-        result = [move for move, _ in sorted_moves]
-        
-        # Lưu vào cache
-        self.book_moves_cache[fen] = result
-        
-        return result
-
-    def evaluate_move(self, board: chess.Board, move: chess.Move):
-        """
-        Trả về một con số đánh giá mức độ 'hấp dẫn' của nước đi.
-        Giá trị càng cao, nước đi càng được ưu tiên duyệt trước.
-        """
-        score = 0
-        from_sq = move.from_square
-        to_sq = move.to_square
-        
-        # 1. Ưu tiên ăn quân (MVV-LVA)
-        captured_piece = board.piece_at(to_sq)
-        moving_piece = board.piece_at(from_sq)
-        enemy_color = not board.turn
-        if captured_piece:
-            # Công thức: 10 * giá_trị_nạn_nhân - giá_trị_kẻ_tấn_công
-            # Ví dụ: Tốt (1) ăn Xe (3) => 10*3= 30
-            score += 10 * self.PIECE_VALUES[captured_piece.piece_type]
-
-        # 2. KIỂM TRA AN TOÀN (Lấy thêm điểm ở đây)
-        # Nếu Tốt (1) ăn Xe (3) sau đó có khả năng bị ăn lại thì trừ (1)
-        if board.is_attacked_by(enemy_color, to_sq):
-            # Trừ điểm dựa trên giá trị quân cờ mình định đưa vào đó
-            score -= self.PIECE_VALUES[moving_piece.piece_type]
-
-        # 3. THOÁT HIỂM
-        # Nếu quân mình đang đứng ở ô bị tấn công, và nước đi này dẫn đến ô an toàn
-        if board.is_attacked_by(enemy_color, from_sq) and not board.is_attacked_by(enemy_color, to_sq):
-            score += self.PIECE_VALUES[moving_piece.piece_type] // 2 # Cộng điểm khuyến khích chạy quân
-
-        # 4. Ưu tiên phong cấp (Promotion)
-        if move.promotion:
-            score += self.PIECE_VALUES[move.promotion]
-
-        # 5. Trừ điểm nước đi lặp lại
-        # Lấy nước đi trước đó của chính quân cờ này
-        if len(board.move_stack) >= 2:
-            last_move = board.move_stack[-2] # Nước đi trước của phe mình
-            if move.to_square == last_move.from_square and move.from_square == last_move.to_square:
-                # Phạt điểm vì đi lùi về vị trí cũ ngay lập tức
-                score -= 50
-        return score
-
-    def is_square_under_attack(self, board: chess.Board, square: chess.Square, attacker_color: chess.Color):
-        # Trả về True nếu 'square' đang bị 'attacker_color' tấn công
-        return board.is_attacked_by(attacker_color, square)
-
-    def getPossibleMove(self, board: chess.Board):
-        return board.legal_moves
-                    
-    def next_move(self, current_board, player):
-        isMax= True
-        if player == 2:
-            isMax= False
-        value, best_move= self.alpha_beta_prunning(-self.INF, self.INF, 5, isMax, current_board)
-        if best_move == None:
-            possibleMoves= list(self.getPossibleMove(current_board))
-            if possibleMoves:
-                best_move= possibleMoves[0]
-        # print(player, " ",isMax, " ", value)
-        self.moves_count+= 1
-        # print("loop: ", self.loop)
-        self.loop= 0
-        return best_move
-
+        sorted_moves = [move for move, _ in sorted(book_moves.items(), key=lambda x: x[1], reverse=True)]
+        self.book_moves_cache[fen] = sorted_moves
+        return sorted_moves
+    
